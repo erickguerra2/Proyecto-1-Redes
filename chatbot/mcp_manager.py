@@ -1,0 +1,81 @@
+import json
+import shutil
+from contextlib import AsyncExitStack
+from typing import Any
+
+from mcp import ClientSession, StdioServerParameters
+from mcp.client.stdio import stdio_client
+
+from . import config
+from .logging_utils import InteractionLogger
+
+
+class MCPManager:
+    """Owns connections to every MCP server listed in mcp_servers.json and exposes their
+    tools to the LLM as Claude-compatible tool definitions."""
+
+    def __init__(self, logger: InteractionLogger):
+        self.logger = logger
+        self._exit_stack = AsyncExitStack()
+        self.sessions: dict[str, ClientSession] = {}
+        self.tool_to_server: dict[str, str] = {}
+
+    async def connect_all(self) -> None:
+        for name, params in self._load_server_configs().items():
+            await self._connect_server(name, params)
+
+    def _load_server_configs(self) -> dict[str, dict]:
+        if not config.MCP_SERVERS_CONFIG.exists():
+            return {}
+        data = json.loads(config.MCP_SERVERS_CONFIG.read_text(encoding="utf-8"))
+        return data.get("mcpServers", {})
+
+    async def _connect_server(self, name: str, params: dict) -> None:
+        # Resolve the command through PATH (e.g. "npx", "uvx") so it works cross-platform.
+        command = shutil.which(params["command"]) or params["command"]
+        server_params = StdioServerParameters(
+            command=command,
+            args=params.get("args", []),
+            env=params.get("env"),
+        )
+        read, write = await self._exit_stack.enter_async_context(stdio_client(server_params))
+        session = await self._exit_stack.enter_async_context(ClientSession(read, write))
+        await session.initialize()
+        self.sessions[name] = session
+
+        tools = await session.list_tools()
+        for tool in tools.tools:
+            self.tool_to_server[tool.name] = name
+        print(f"[MCP] connected to '{name}' ({len(tools.tools)} tools)")
+
+    async def list_claude_tools(self) -> list[dict[str, Any]]:
+        claude_tools = []
+        for session in self.sessions.values():
+            tools = await session.list_tools()
+            for tool in tools.tools:
+                claude_tools.append({
+                    "name": tool.name,
+                    "description": tool.description or "",
+                    "input_schema": tool.inputSchema,
+                })
+        return claude_tools
+
+    async def call_tool(self, tool_name: str, arguments: dict) -> str:
+        server_name = self.tool_to_server.get(tool_name)
+        if server_name is None:
+            raise ValueError(f"Unknown tool '{tool_name}'")
+        session = self.sessions[server_name]
+
+        self.logger.log_request(server_name, tool_name, arguments)
+        try:
+            result = await session.call_tool(tool_name, arguments)
+        except Exception as exc:
+            self.logger.log_error(server_name, tool_name, str(exc))
+            raise
+
+        text = "\n".join(block.text for block in result.content if hasattr(block, "text"))
+        self.logger.log_response(server_name, tool_name, text)
+        return text
+
+    async def close(self) -> None:
+        await self._exit_stack.aclose()

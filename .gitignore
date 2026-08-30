@@ -1,0 +1,16 @@
+# Nested independent repo (public sat-track-mcp server) — has its own git history
+sat-track-mcp/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/
+
+# Secrets / local config
+.env
+
+# MCP interaction logs (generated at runtime)
+logs/

@@ -14,3 +14,6 @@ venv/
 
 # MCP interaction logs (generated at runtime)
 logs/
+
+# Sandbox directory the Filesystem/Git MCP servers are allowed to touch
+workspace/

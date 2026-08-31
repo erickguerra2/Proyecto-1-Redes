@@ -11,8 +11,8 @@ from .logging_utils import InteractionLogger
 
 
 class MCPManager:
-    """Owns connections to every MCP server listed in mcp_servers.json and exposes their
-    tools to the LLM as Claude-compatible tool definitions."""
+    """Maneja las conexiones a los servidores MCP definidos en mcp_servers.json
+    y expone sus tools al LLM en formato compatible con Claude."""
 
     def __init__(self, logger: InteractionLogger):
         self.logger = logger
@@ -30,12 +30,17 @@ class MCPManager:
         data = json.loads(config.MCP_SERVERS_CONFIG.read_text(encoding="utf-8"))
         return data.get("mcpServers", {})
 
+    @staticmethod
+    def _expand_placeholders(value: str) -> str:
+        return value.replace("${WORKSPACE}", str(config.PROJECT_ROOT / "workspace"))
+
     async def _connect_server(self, name: str, params: dict) -> None:
-        # Resolve the command through PATH (e.g. "npx", "uvx") so it works cross-platform.
+        # busca el comando en el PATH ("npx", "uvx", etc.) para que funcione en cualquier SO
         command = shutil.which(params["command"]) or params["command"]
+        args = [self._expand_placeholders(arg) for arg in params.get("args", [])]
         server_params = StdioServerParameters(
             command=command,
-            args=params.get("args", []),
+            args=args,
             env=params.get("env"),
         )
         read, write = await self._exit_stack.enter_async_context(stdio_client(server_params))
@@ -56,7 +61,7 @@ class MCPManager:
                 claude_tools.append({
                     "name": tool.name,
                     "description": tool.description or "",
-                    "input_schema": tool.inputSchema,
+                    "input_schema": tool.input_schema,
                 })
         return claude_tools
 

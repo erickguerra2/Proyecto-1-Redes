@@ -23,15 +23,21 @@ This repository currently implements:
   under `logs/` (`chatbot/logging_utils.py`).
 - An `MCPManager` that connects to every server listed in `mcp_servers.json`
   over stdio, exposes their tools to Claude, and dispatches tool calls
-  (`chatbot/mcp_manager.py`). No servers are configured yet — that's added
-  incrementally as each project phase (Filesystem/Git MCP servers, the
-  satellite MCP server, remote servers) is implemented.
+  (`chatbot/mcp_manager.py`).
+- The official **Filesystem MCP server** and **Git MCP server** (Anthropic),
+  wired in via `mcp_servers.json`, scoped to the `workspace/` sandbox
+  directory so the chatbot can create a repo, write a README, stage it, and
+  commit — all from natural-language instructions.
+- The satellite MCP server (`sat-track-mcp/`), a remote MCP server, and other
+  students' servers will be added incrementally in later phases.
 
 See [`CONTEXT.md`](CONTEXT.md) for the full project checklist and requirements.
 
 ## Requirements
 
 - Python 3.10+
+- Node.js (for `npx`, used to run the Filesystem MCP server)
+- [`uv`](https://docs.astral.sh/uv/) (for `uvx`, used to run the Git MCP server)
 - An [Anthropic API key](https://console.anthropic.com/)
 
 ## Installation
@@ -56,22 +62,28 @@ call made during the conversation is printed to the console and appended to
 ## Configuring MCP servers
 
 Servers are declared in `mcp_servers.json`, using the same shape as Claude
-Desktop's config file:
+Desktop's config file. `${WORKSPACE}` expands to the absolute path of the
+`workspace/` sandbox directory:
 
 ```json
 {
   "mcpServers": {
-    "example": {
+    "filesystem": {
       "command": "npx",
-      "args": ["-y", "@some/mcp-server"],
-      "env": {}
+      "args": ["-y", "@modelcontextprotocol/server-filesystem", "${WORKSPACE}"]
+    },
+    "git": {
+      "command": "uvx",
+      "args": ["mcp-server-git"]
     }
   }
 }
 ```
 
 The chatbot launches each configured server over stdio at startup and makes
-its tools available to Claude automatically.
+its tools available to Claude automatically. The Filesystem server is scoped
+to `workspace/` so the chatbot can only read/write inside that sandbox, not
+across the rest of the project.
 
 ## Project layout
 
@@ -83,6 +95,7 @@ chatbot/            chatbot host source code
   config.py         environment/config loading
 mcp_servers.json    declares which MCP servers to connect to
 logs/               MCP interaction logs (gitignored)
+workspace/          sandbox the Filesystem/Git MCP servers operate on (gitignored)
 sat-track-mcp/      satellite MCP server — separate public repo, nested here
 docs/               report material (network layer analysis, conclusions, etc.)
 ```

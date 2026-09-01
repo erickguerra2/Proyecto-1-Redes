@@ -32,16 +32,21 @@ class MCPManager:
 
     @staticmethod
     def _expand_placeholders(value: str) -> str:
-        return value.replace("${WORKSPACE}", str(config.PROJECT_ROOT / "workspace"))
+        value = value.replace("${WORKSPACE}", str(config.PROJECT_ROOT / "workspace"))
+        value = value.replace("${SAT_TRACK_MCP_ROOT}", str(config.PROJECT_ROOT / "sat-track-mcp"))
+        return value
 
     async def _connect_server(self, name: str, params: dict) -> None:
+        command = self._expand_placeholders(params["command"])
         # busca el comando en el PATH ("npx", "uvx", etc.) para que funcione en cualquier SO
-        command = shutil.which(params["command"]) or params["command"]
+        command = shutil.which(command) or command
         args = [self._expand_placeholders(arg) for arg in params.get("args", [])]
+        cwd = self._expand_placeholders(params["cwd"]) if "cwd" in params else None
         server_params = StdioServerParameters(
             command=command,
             args=args,
             env=params.get("env"),
+            cwd=cwd,
         )
         read, write = await self._exit_stack.enter_async_context(stdio_client(server_params))
         session = await self._exit_stack.enter_async_context(ClientSession(read, write))

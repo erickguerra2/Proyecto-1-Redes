@@ -7,6 +7,11 @@
     "git": {
       "command": "uvx",
       "args": ["mcp-server-git"]
+    },
+    "satellite": {
+      "command": "${SAT_TRACK_MCP_ROOT}/.venv/Scripts/python.exe",
+      "args": ["-m", "sat_track_mcp.server"],
+      "cwd": "${SAT_TRACK_MCP_ROOT}"
     }
   }
 }

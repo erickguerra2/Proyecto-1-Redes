@@ -3,6 +3,10 @@ import sys
 
 import anthropic
 
+# fuerza UTF-8 en consola de Windows para que tildes/enies no salgan mal
+sys.stdout.reconfigure(encoding="utf-8")
+sys.stdin.reconfigure(encoding="utf-8")
+
 from . import config
 from .logging_utils import InteractionLogger
 from .mcp_manager import MCPManager
@@ -69,13 +73,14 @@ async def handle_turn(client: anthropic.Anthropic, mcp: MCPManager, messages: li
         tool_results = []
         for tool_use in tool_uses:
             try:
-                result_text = await mcp.call_tool(tool_use.name, tool_use.input)
+                result_text, is_error = await mcp.call_tool(tool_use.name, tool_use.input)
             except Exception as exc:
-                result_text = f"error: {exc}"
+                result_text, is_error = f"error: {exc}", True
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": tool_use.id,
                 "content": result_text,
+                "is_error": is_error,
             })
 
         messages.append({"role": "user", "content": tool_results})

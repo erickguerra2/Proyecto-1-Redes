@@ -70,7 +70,9 @@ class MCPManager:
                 })
         return claude_tools
 
-    async def call_tool(self, tool_name: str, arguments: dict) -> str:
+    async def call_tool(self, tool_name: str, arguments: dict) -> tuple[str, bool]:
+        """Devuelve (texto, is_error). is_error=True si el servidor reporto una falla
+        (ej. repo_path que no es un repositorio git valido)."""
         server_name = self.tool_to_server.get(tool_name)
         if server_name is None:
             raise ValueError(f"Unknown tool '{tool_name}'")
@@ -84,8 +86,12 @@ class MCPManager:
             raise
 
         text = "\n".join(block.text for block in result.content if hasattr(block, "text"))
-        self.logger.log_response(server_name, tool_name, text)
-        return text
+        is_error = bool(getattr(result, "is_error", False))
+        if is_error:
+            self.logger.log_error(server_name, tool_name, text)
+        else:
+            self.logger.log_response(server_name, tool_name, text)
+        return text, is_error
 
     async def close(self) -> None:
         await self._exit_stack.aclose()

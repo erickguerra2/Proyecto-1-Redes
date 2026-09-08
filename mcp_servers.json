@@ -30,6 +30,11 @@
     },
     "satellite-remote": {
       "url": "https://satellite-remote-mcp.erickguerra2.workers.dev/mcp"
+    },
+    "mixassist": {
+      "command": "${MIXASSIST_MCP_ROOT}/.venv/Scripts/python.exe",
+      "args": ["-m", "mixassist_mcp.server"],
+      "cwd": "${MIXASSIST_MCP_ROOT}"
     }
   }
 }

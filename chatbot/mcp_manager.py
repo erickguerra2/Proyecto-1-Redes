@@ -37,6 +37,7 @@ class MCPManager:
         value = value.replace("${SAT_TRACK_MCP_ROOT}", str(config.PROJECT_ROOT / "sat-track-mcp"))
         value = value.replace("${HOTEL_MCP_ROOT}", str(config.PROJECT_ROOT / "hotel-mcp-server"))
         value = value.replace("${PELICULAS_MCP_ROOT}", str(config.PROJECT_ROOT / "mpc-server-peliculas"))
+        value = value.replace("${MIXASSIST_MCP_ROOT}", str(config.PROJECT_ROOT / "mixassist-mcp-server"))
         return value
 
     async def _connect_server(self, name: str, params: dict) -> None:

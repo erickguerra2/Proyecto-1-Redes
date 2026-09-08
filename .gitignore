@@ -4,6 +4,10 @@ sat-track-mcp/
 # Classmate's MCP server, cloned locally to test integration — not ours to track
 hotel-mcp-server/
 mpc-server-peliculas/
+mixassist-mcp-server/
+
+# Local test audio for mixassist-mcp-server (large, not ours to redistribute)
+/*.wav
 
 # Python
 __pycache__/
@@ -21,3 +25,6 @@ logs/
 
 # Sandbox directory the Filesystem/Git MCP servers are allowed to touch
 workspace/
+
+# Files attached from the web GUI (chatbot/web.py's /upload endpoint)
+uploads/

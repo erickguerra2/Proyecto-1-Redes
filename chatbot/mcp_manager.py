@@ -34,6 +34,7 @@ class MCPManager:
     def _expand_placeholders(value: str) -> str:
         value = value.replace("${WORKSPACE}", str(config.PROJECT_ROOT / "workspace"))
         value = value.replace("${SAT_TRACK_MCP_ROOT}", str(config.PROJECT_ROOT / "sat-track-mcp"))
+        value = value.replace("${HOTEL_MCP_ROOT}", str(config.PROJECT_ROOT / "hotel-mcp-server"))
         return value
 
     async def _connect_server(self, name: str, params: dict) -> None:
@@ -42,10 +43,11 @@ class MCPManager:
         command = shutil.which(command) or command
         args = [self._expand_placeholders(arg) for arg in params.get("args", [])]
         cwd = self._expand_placeholders(params["cwd"]) if "cwd" in params else None
+        env = {k: self._expand_placeholders(v) for k, v in params["env"].items()} if "env" in params else None
         server_params = StdioServerParameters(
             command=command,
             args=args,
-            env=params.get("env"),
+            env=env,
             cwd=cwd,
         )
         read, write = await self._exit_stack.enter_async_context(stdio_client(server_params))

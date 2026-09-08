@@ -1,4 +1,5 @@
 import asyncio
+import json
 import sys
 
 import anthropic
@@ -31,6 +32,13 @@ async def run_chat() -> None:
     await mcp.connect_all()
 
     messages: list[dict] = []
+    # hotel_mcp's crear_reservacion is a two-step write: a preview call, then a
+    # confirmado=true call. A server can't see where one user turn ends and the
+    # next begins, so only the host can stop the model from chaining both calls
+    # in a single reply and writing before the user actually approved anything.
+    # We gate confirmado=true on the preview having happened on a *previous* turn.
+    write_confirmation_state = {"preview_turn": None}
+    turn_number = 0
     print("Satellite Ops Assistant — type 'exit' to quit.\n")
 
     try:
@@ -41,13 +49,20 @@ async def run_chat() -> None:
             if not user_input:
                 continue
 
+            turn_number += 1
             messages.append({"role": "user", "content": user_input})
-            await handle_turn(client, mcp, messages)
+            await handle_turn(client, mcp, messages, turn_number, write_confirmation_state)
     finally:
         await mcp.close()
 
 
-async def handle_turn(client: anthropic.Anthropic, mcp: MCPManager, messages: list[dict]) -> None:
+async def handle_turn(
+    client: anthropic.Anthropic,
+    mcp: MCPManager,
+    messages: list[dict],
+    turn_number: int,
+    write_confirmation_state: dict,
+) -> None:
     tools = await mcp.list_claude_tools()
 
     while True:
@@ -72,10 +87,38 @@ async def handle_turn(client: anthropic.Anthropic, mcp: MCPManager, messages: li
 
         tool_results = []
         for tool_use in tool_uses:
+            if tool_use.name == "crear_reservacion" and tool_use.input.get("confirmado"):
+                preview_turn = write_confirmation_state["preview_turn"]
+                if preview_turn is None or preview_turn >= turn_number:
+                    result_text = (
+                        "Blocked by the host: crear_reservacion needs a preview call "
+                        "(without confirmado) shown to the user in an earlier turn before "
+                        "confirmado=true is allowed. Call it again without confirmado, "
+                        "show the details, and wait for the user's next message."
+                    )
+                    is_error = True
+                    tool_results.append({
+                        "type": "tool_result",
+                        "tool_use_id": tool_use.id,
+                        "content": result_text,
+                        "is_error": is_error,
+                    })
+                    continue
+                write_confirmation_state["preview_turn"] = None
+
             try:
                 result_text, is_error = await mcp.call_tool(tool_use.name, tool_use.input)
             except Exception as exc:
                 result_text, is_error = f"error: {exc}", True
+
+            if tool_use.name == "crear_reservacion" and not is_error:
+                try:
+                    payload = json.loads(result_text)
+                except json.JSONDecodeError:
+                    payload = {}
+                if payload.get("requiere_confirmacion"):
+                    write_confirmation_state["preview_turn"] = turn_number
+
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": tool_use.id,

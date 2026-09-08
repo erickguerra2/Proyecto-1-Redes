@@ -1,6 +1,9 @@
 # Nested independent repo (public sat-track-mcp server) — has its own git history
 sat-track-mcp/
 
+# Classmate's MCP server, cloned locally to test integration — not ours to track
+hotel-mcp-server/
+
 # Python
 __pycache__/
 *.pyc

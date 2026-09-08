@@ -13,6 +13,15 @@
       "command": "${SAT_TRACK_MCP_ROOT}/.venv/Scripts/python.exe",
       "args": ["-m", "sat_track_mcp.server"],
       "cwd": "${SAT_TRACK_MCP_ROOT}"
+    },
+    "hotel": {
+      "command": "${HOTEL_MCP_ROOT}/.venv/Scripts/python.exe",
+      "args": ["-m", "hotel_mcp"],
+      "cwd": "${HOTEL_MCP_ROOT}",
+      "env": {
+        "HOTEL_DB": "${HOTEL_MCP_ROOT}/data/hotel_chatbot.db",
+        "HOTEL_EXPORT_DIR": "${HOTEL_MCP_ROOT}/comprobantes"
+      }
     }
   }
 }

@@ -1,0 +1,529 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Satellite Ops Assistant</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ctext y='.9em' font-size='90'%3E%F0%9F%9B%B0%EF%B8%8F%3C/text%3E%3C/svg%3E" />
+<style>
+  :root {
+    color-scheme: dark;
+    --space-0: #04070f;
+    --space-1: #070d1c;
+    --panel: #0d1830;
+    --panel-2: #101f3c;
+    --border: #1c3358;
+    --border-bright: #2f5488;
+    --text: #dfe9f8;
+    --muted: #6d87ac;
+    --cyan: #38e8ff;
+    --cyan-dim: #1f9dc4;
+    --cyan-text: #012028;
+    --error: #ff5c78;
+    --green: #4ade80;
+    --mono: ui-monospace, "SF Mono", "Cascadia Code", Consolas, "Roboto Mono", monospace;
+    --sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  }
+  * { box-sizing: border-box; }
+  html, body { height: 100%; margin: 0; }
+  body {
+    display: flex;
+    flex-direction: column;
+    color: var(--text);
+    font-family: var(--sans);
+    background-color: var(--space-0);
+    background-image:
+      radial-gradient(1.6px 1.6px at 8% 12%, #fff, transparent),
+      radial-gradient(1px 1px at 22% 68%, #cfe6ff, transparent),
+      radial-gradient(1.4px 1.4px at 38% 24%, #fff, transparent),
+      radial-gradient(1px 1px at 52% 82%, #cfe6ff, transparent),
+      radial-gradient(1.8px 1.8px at 67% 8%, #fff, transparent),
+      radial-gradient(1px 1px at 78% 44%, #cfe6ff, transparent),
+      radial-gradient(1.3px 1.3px at 91% 76%, #fff, transparent),
+      radial-gradient(1px 1px at 14% 90%, #cfe6ff, transparent),
+      radial-gradient(1.5px 1.5px at 85% 20%, #fff, transparent),
+      radial-gradient(1px 1px at 45% 55%, #cfe6ff, transparent),
+      radial-gradient(900px 500px at 50% -10%, rgba(56,232,255,0.07), transparent 60%);
+    background-repeat: repeat, repeat, repeat, repeat, repeat, repeat, repeat, repeat, repeat, repeat, no-repeat;
+    background-size: 340px 340px, 340px 340px, 340px 340px, 340px 340px, 340px 340px,
+                      340px 340px, 340px 340px, 340px 340px, 340px 340px, 340px 340px, 100% 100%;
+  }
+
+  header {
+    position: relative;
+    padding: 16px 24px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    background: linear-gradient(180deg, #0c1830 0%, #081020 100%);
+    border-bottom: 1px solid var(--border-bright);
+    box-shadow: 0 1px 24px rgba(56, 232, 255, 0.08);
+  }
+  header::after {
+    content: "";
+    position: absolute; left: 0; right: 0; bottom: -1px; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+    opacity: 0.5;
+  }
+  .badge {
+    font-size: 20px;
+    display: inline-block;
+    animation: drift 6s ease-in-out infinite;
+  }
+  @keyframes drift {
+    0%, 100% { transform: translateY(0) rotate(-6deg); }
+    50% { transform: translateY(-3px) rotate(6deg); }
+  }
+  header h1 {
+    font-size: 14px;
+    font-weight: 700;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    margin: 0;
+    font-family: var(--mono);
+    color: var(--text);
+  }
+  header .subtitle {
+    font-size: 11px;
+    color: var(--muted);
+    font-family: var(--mono);
+    letter-spacing: 0.04em;
+  }
+  .signal { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+  .signal .ring {
+    position: relative;
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--muted);
+  }
+  .signal .ring.connected { background: var(--green); box-shadow: 0 0 0 0 rgba(74,222,128,0.6); animation: pulse 2s infinite; }
+  .signal .ring.error { background: var(--error); }
+  @keyframes pulse {
+    0% { box-shadow: 0 0 0 0 rgba(74,222,128,0.55); }
+    70% { box-shadow: 0 0 0 8px rgba(74,222,128,0); }
+    100% { box-shadow: 0 0 0 0 rgba(74,222,128,0); }
+  }
+  .signal .label {
+    font-family: var(--mono);
+    font-size: 11px;
+    letter-spacing: 0.06em;
+    color: var(--muted);
+    text-transform: uppercase;
+  }
+
+  #chat {
+    flex: 1;
+    overflow-y: auto;
+    padding: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+    max-width: 860px;
+    width: 100%;
+    margin: 0 auto;
+  }
+
+  .msg { display: flex; flex-direction: column; }
+  .msg.user { align-items: flex-end; }
+  .msg.assistant { align-items: flex-start; }
+
+  .bubble {
+    max-width: 75%;
+    padding: 11px 15px;
+    border-radius: 12px;
+    line-height: 1.5;
+    font-size: 14.5px;
+    word-wrap: break-word;
+    position: relative;
+  }
+  .bubble::before {
+    display: block;
+    font-family: var(--mono);
+    font-size: 10px;
+    letter-spacing: 0.09em;
+    margin-bottom: 4px;
+    opacity: 0.75;
+  }
+  .msg.user .bubble {
+    background: linear-gradient(135deg, var(--cyan) 0%, var(--cyan-dim) 100%);
+    color: var(--cyan-text);
+    border-bottom-right-radius: 3px;
+    white-space: pre-wrap;
+  }
+  .msg.user .bubble::before { content: "OPERATOR ▸"; color: var(--cyan-text); }
+  .msg.assistant .bubble {
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--cyan-dim);
+    border-bottom-left-radius: 3px;
+  }
+  .msg.assistant .bubble::before { content: "◂ MISSION CONTROL"; color: var(--cyan-dim); }
+  .msg.assistant .bubble p { margin: 0 0 10px; }
+  .msg.assistant .bubble p:last-child { margin-bottom: 0; }
+  .msg.assistant .bubble strong { color: var(--cyan); font-weight: 700; }
+  .msg.assistant .bubble em { color: var(--text); font-style: italic; }
+  .msg.assistant .bubble code {
+    font-family: var(--mono);
+    font-size: 0.9em;
+    background: rgba(56, 232, 255, 0.1);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 1px 5px;
+  }
+  .msg.assistant .bubble ul { margin: 0 0 10px; padding-left: 20px; }
+  .msg.assistant .bubble ul:last-child { margin-bottom: 0; }
+  .msg.assistant .bubble li { margin-bottom: 4px; }
+  .msg.assistant .bubble li::marker { color: var(--cyan-dim); }
+
+  .tool-event {
+    align-self: flex-start;
+    font-size: 12px;
+    color: #8fd8e8;
+    background: #071120;
+    border: 1px solid var(--border);
+    border-left: 2px solid var(--cyan-dim);
+    border-radius: 6px;
+    padding: 7px 11px;
+    max-width: 90%;
+    font-family: var(--mono);
+    word-break: break-word;
+  }
+  .tool-event.error { color: var(--error); border-left-color: var(--error); }
+
+  .typing .bubble::before { content: none; }
+  .typing { display: flex; gap: 4px; padding: 12px 15px; }
+  .typing span {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--cyan-dim);
+    animation: bounce 1.2s infinite ease-in-out;
+  }
+  .typing span:nth-child(2) { animation-delay: 0.15s; }
+  .typing span:nth-child(3) { animation-delay: 0.3s; }
+  @keyframes bounce { 0%, 60%, 100% { transform: translateY(0); opacity: 0.5; } 30% { transform: translateY(-4px); opacity: 1; } }
+
+  form#composer {
+    display: flex;
+    align-items: flex-end;
+    gap: 10px;
+    padding: 14px 24px 22px;
+    max-width: 860px;
+    width: 100%;
+    margin: 0 auto;
+  }
+  .input-wrap {
+    flex: 1;
+    display: flex;
+    align-items: flex-end;
+    gap: 8px;
+    background: var(--panel-2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 8px 8px 14px;
+  }
+  .input-wrap:focus-within { border-color: var(--cyan-dim); box-shadow: 0 0 0 3px rgba(56,232,255,0.12); }
+  .prompt-caret { font-family: var(--mono); color: var(--cyan-dim); padding-bottom: 8px; user-select: none; }
+  #input {
+    flex: 1;
+    resize: none;
+    background: transparent;
+    border: none;
+    color: var(--text);
+    padding: 8px 0;
+    font-size: 14.5px;
+    font-family: inherit;
+    max-height: 160px;
+  }
+  #input:focus { outline: none; }
+  #input::placeholder { color: var(--muted); }
+  button#send {
+    background: var(--cyan);
+    color: var(--cyan-text);
+    border: none;
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-size: 12px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: filter 0.15s;
+  }
+  button#send:hover:not(:disabled) { filter: brightness(1.1); }
+  button#send:disabled { opacity: 0.4; cursor: not-allowed; }
+
+  .empty-state {
+    margin: auto;
+    text-align: center;
+    color: var(--muted);
+    max-width: 480px;
+  }
+  .empty-state .icon { font-size: 34px; display: block; margin-bottom: 10px; }
+  .empty-state h2 {
+    color: var(--text);
+    font-size: 16px;
+    letter-spacing: 0.04em;
+    font-family: var(--mono);
+    text-transform: uppercase;
+    margin: 0 0 8px;
+  }
+  .empty-state p { font-size: 13px; margin: 0 0 18px; }
+  .examples { display: flex; flex-direction: column; gap: 8px; }
+  .example-chip {
+    font-family: var(--mono);
+    font-size: 12px;
+    text-align: left;
+    color: var(--cyan);
+    background: var(--panel);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 9px 12px;
+    cursor: pointer;
+    transition: border-color 0.15s, background 0.15s;
+  }
+  .example-chip:hover { border-color: var(--cyan-dim); background: var(--panel-2); }
+  .example-chip::before { content: "› "; color: var(--cyan-dim); }
+
+  #chat::-webkit-scrollbar { width: 8px; }
+  #chat::-webkit-scrollbar-thumb { background: var(--border); border-radius: 8px; }
+  #chat::-webkit-scrollbar-track { background: transparent; }
+</style>
+</head>
+<body>
+  <header>
+    <span class="badge" aria-hidden="true">🛰️</span>
+    <div>
+      <h1>Satellite Ops Assistant</h1>
+      <div class="subtitle">MCP MISSION CONTROL TERMINAL</div>
+    </div>
+    <div class="signal">
+      <span class="ring" id="status-dot" aria-hidden="true"></span>
+      <span class="label" id="status-text">connecting…</span>
+    </div>
+  </header>
+
+  <div id="chat">
+    <div class="empty-state" id="empty-state">
+      <span class="icon">🛰️</span>
+      <h2>Signal Ready</h2>
+      <p>Ask about satellites, or anything the connected MCP servers can do.</p>
+      <div class="examples">
+        <button type="button" class="example-chip" data-example="When is the ISS next visible from Guatemala City?">When is the ISS next visible from Guatemala City?</button>
+        <button type="button" class="example-chip" data-example="Is there a conjunction risk for NORAD 25544 this week?">Is there a conjunction risk for NORAD 25544 this week?</button>
+        <button type="button" class="example-chip" data-example="Where is the ISS right now?">Where is the ISS right now? (remote MCP server)</button>
+      </div>
+    </div>
+  </div>
+
+  <form id="composer">
+    <div class="input-wrap">
+      <span class="prompt-caret" aria-hidden="true">&gt;</span>
+      <textarea id="input" rows="1" placeholder="Transmit a message…" aria-label="Message" autofocus></textarea>
+    </div>
+    <button id="send" type="submit">Transmit</button>
+  </form>
+
+<script>
+  const chat = document.getElementById("chat");
+  const emptyState = document.getElementById("empty-state");
+  const form = document.getElementById("composer");
+  const input = document.getElementById("input");
+  const sendBtn = document.getElementById("send");
+  const statusDot = document.getElementById("status-dot");
+  const statusText = document.getElementById("status-text");
+
+  let ws;
+  let typingEl = null;
+  let currentAssistantBubble = null;
+
+  function scrollToBottom() {
+    chat.scrollTop = chat.scrollHeight;
+  }
+
+  const HTML_ESCAPES = { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" };
+  function escapeHtml(text) {
+    return text.replace(/[&<>"']/g, (ch) => HTML_ESCAPES[ch]);
+  }
+
+  // Minimal, safe subset of markdown for Claude's replies: escape first, then
+  // only re-introduce a handful of known-safe tags, so nothing the model (or
+  // a tool result echoed back through it) writes can inject arbitrary HTML.
+  function renderMarkdown(raw) {
+    const escaped = escapeHtml(raw);
+    const lines = escaped.split("\n");
+    const htmlParts = [];
+    let listBuffer = [];
+
+    function flushList() {
+      if (listBuffer.length) {
+        htmlParts.push(`<ul>${listBuffer.map((item) => `<li>${item}</li>`).join("")}</ul>`);
+        listBuffer = [];
+      }
+    }
+
+    function inline(text) {
+      return text
+        .replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
+        .replace(/(?<!\*)\*([^*\n]+)\*(?!\*)/g, "<em>$1</em>")
+        .replace(/`([^`]+)`/g, "<code>$1</code>");
+    }
+
+    let paragraph = [];
+    function flushParagraph() {
+      if (paragraph.length) {
+        htmlParts.push(`<p>${paragraph.join("<br>")}</p>`);
+        paragraph = [];
+      }
+    }
+
+    for (const line of lines) {
+      const listMatch = line.match(/^\s*[-*]\s+(.*)$/);
+      if (listMatch) {
+        flushParagraph();
+        listBuffer.push(inline(listMatch[1]));
+      } else if (line.trim() === "") {
+        flushList();
+        flushParagraph();
+      } else {
+        flushList();
+        paragraph.push(inline(line));
+      }
+    }
+    flushList();
+    flushParagraph();
+    return htmlParts.join("");
+  }
+
+  function clearEmptyState() {
+    if (emptyState.parentNode) emptyState.remove();
+  }
+
+  function addUserMessage(text) {
+    clearEmptyState();
+    const row = document.createElement("div");
+    row.className = "msg user";
+    row.innerHTML = `<div class="bubble"></div>`;
+    row.firstChild.textContent = text;
+    chat.appendChild(row);
+    scrollToBottom();
+  }
+
+  function startAssistantBubble() {
+    clearEmptyState();
+    const row = document.createElement("div");
+    row.className = "msg assistant";
+    row.innerHTML = `<div class="bubble"></div>`;
+    chat.appendChild(row);
+    currentAssistantBubble = row.firstChild;
+    currentAssistantBubble.dataset.raw = "";
+    scrollToBottom();
+    return currentAssistantBubble;
+  }
+
+  function appendAssistantText(text) {
+    const bubble = currentAssistantBubble || startAssistantBubble();
+    bubble.dataset.raw += (bubble.dataset.raw ? "\n\n" : "") + text;
+    bubble.innerHTML = renderMarkdown(bubble.dataset.raw);
+  }
+
+  function addToolEvent(label, isError) {
+    clearEmptyState();
+    currentAssistantBubble = null; // next text block starts a fresh bubble
+    const el = document.createElement("div");
+    el.className = "tool-event" + (isError ? " error" : "");
+    el.textContent = label;
+    chat.appendChild(el);
+    scrollToBottom();
+  }
+
+  function showTyping() {
+    hideTyping();
+    typingEl = document.createElement("div");
+    typingEl.className = "msg assistant";
+    typingEl.innerHTML = `<div class="bubble typing"><span></span><span></span><span></span></div>`;
+    chat.appendChild(typingEl);
+    scrollToBottom();
+  }
+
+  function hideTyping() {
+    if (typingEl) { typingEl.remove(); typingEl = null; }
+  }
+
+  function setBusy(busy) {
+    input.disabled = busy;
+    sendBtn.disabled = busy;
+    if (busy) showTyping(); else hideTyping();
+  }
+
+  function sendMessage(text) {
+    if (!text || !ws || ws.readyState !== WebSocket.OPEN) return;
+    addUserMessage(text);
+    currentAssistantBubble = null;
+    ws.send(text);
+    input.value = "";
+    input.style.height = "auto";
+    setBusy(true);
+  }
+
+  function connect() {
+    const proto = location.protocol === "https:" ? "wss" : "ws";
+    ws = new WebSocket(`${proto}://${location.host}/ws`);
+
+    ws.onopen = () => {
+      statusDot.className = "ring connected";
+      statusText.textContent = "link established";
+    };
+
+    ws.onclose = () => {
+      statusDot.className = "ring error";
+      statusText.textContent = "signal lost — retrying…";
+      setBusy(false);
+      setTimeout(connect, 1500);
+    };
+
+    ws.onerror = () => { ws.close(); };
+
+    ws.onmessage = (event) => {
+      const data = JSON.parse(event.data);
+      hideTyping();
+
+      if (data.type === "text") {
+        appendAssistantText(data.text);
+      } else if (data.type === "tool_call") {
+        addToolEvent(`🛰️ calling ${data.name}(${JSON.stringify(data.arguments)})`, false);
+      } else if (data.type === "tool_result") {
+        const preview = data.result.length > 160 ? data.result.slice(0, 160) + "…" : data.result;
+        addToolEvent(`${data.is_error ? "⚠️" : "📡"} ${data.name} → ${preview}`, data.is_error);
+      } else if (data.type === "error") {
+        addToolEvent(`⚠️ ${data.text}`, true);
+      }
+
+      setBusy(false);
+      scrollToBottom();
+    };
+  }
+
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    sendMessage(input.value.trim());
+  });
+
+  document.querySelectorAll(".example-chip").forEach((chip) => {
+    chip.addEventListener("click", () => sendMessage(chip.dataset.example));
+  });
+
+  input.addEventListener("keydown", (e) => {
+    if (e.key === "Enter" && !e.shiftKey) {
+      e.preventDefault();
+      form.requestSubmit();
+    }
+  });
+
+  input.addEventListener("input", () => {
+    input.style.height = "auto";
+    input.style.height = Math.min(input.scrollHeight, 160) + "px";
+  });
+
+  connect();
+</script>
+</body>
+</html>

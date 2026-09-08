@@ -42,6 +42,11 @@ This repository currently implements:
   and reachable over Streamable HTTP instead of stdio — see its own
   [README](remote-mcp-server/README.md). `MCPManager` connects to it the same
   way as the stdio servers, branching on a `url` key in `mcp_servers.json`.
+- A web GUI (`chatbot/web.py`, optional extra) — the console remains the
+  required way to run the project, but the same conversation engine
+  (`chatbot/engine.py`) is also served over a WebSocket to a small browser
+  chat UI (`chatbot/web_static/index.html`) that shows tool calls and their
+  results inline as they happen, not just the final answer.
 
 See [`CONTEXT.md`](CONTEXT.md) for the full project checklist and requirements.
 
@@ -70,6 +75,16 @@ python -m chatbot.main
 Type your question at the `you>` prompt. Type `exit` to quit. Any MCP tool
 call made during the conversation is printed to the console and appended to
 `logs/mcp_interactions_<timestamp>.jsonl`.
+
+### Optional: web GUI
+
+```bash
+python -m chatbot.web
+```
+
+Then open http://127.0.0.1:8000. This is the same chatbot and the same
+`MCPManager`/MCP servers — only the front end differs, so MCP interactions
+are still logged to `logs/` exactly as in the console version.
 
 ## Configuring MCP servers
 
@@ -115,7 +130,10 @@ local process — this is how the remote Cloudflare Worker is wired in:
 
 ```
 chatbot/            chatbot host source code
-  main.py           entry point / conversation loop
+  main.py           console entry point / conversation loop
+  web.py            optional web GUI entry point (FastAPI + WebSocket)
+  web_static/       browser chat UI served by web.py
+  engine.py         conversation engine shared by main.py and web.py
   mcp_manager.py     MCP client connections + tool dispatch
   logging_utils.py  MCP interaction logging
   config.py         environment/config loading

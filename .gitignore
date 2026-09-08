@@ -3,6 +3,7 @@ sat-track-mcp/
 
 # Classmate's MCP server, cloned locally to test integration — not ours to track
 hotel-mcp-server/
+mpc-server-peliculas/
 
 # Python
 __pycache__/

@@ -28,8 +28,17 @@ This repository currently implements:
   wired in via `mcp_servers.json`, scoped to the `workspace/` sandbox
   directory so the chatbot can create a repo, write a README, stage it, and
   commit — all from natural-language instructions.
-- The satellite MCP server (`sat-track-mcp/`), a remote MCP server, and other
-  students' servers will be added incrementally in later phases.
+- The satellite MCP server (`sat-track-mcp/`), a purpose-built server for the
+  satellite ops use case.
+- Two classmates' MCP servers, wired in the same way: `hotel-mcp-server`
+  (JosFer720) and `mpc-server-peliculas` (Albu231311, a movie-rental store
+  server).
+- A host-side gate on `hotel-mcp-server`'s two-step write flow
+  (`crear_reservacion`): a `confirmado: true` call is only accepted if the
+  preview call happened on an earlier user turn, so the model can't chain
+  preview + confirm in a single reply and write before the user actually
+  approved anything.
+- A remote MCP server will be added in a later phase.
 
 See [`CONTEXT.md`](CONTEXT.md) for the full project checklist and requirements.
 
@@ -96,6 +105,8 @@ chatbot/            chatbot host source code
 mcp_servers.json    declares which MCP servers to connect to
 logs/               MCP interaction logs (gitignored)
 workspace/          sandbox the Filesystem/Git MCP servers operate on (gitignored)
-sat-track-mcp/      satellite MCP server — separate public repo, nested here
-docs/               report material (network layer analysis, conclusions, etc.)
+sat-track-mcp/          satellite MCP server — separate public repo, nested here
+hotel-mcp-server/       classmate's MCP server (gitignored, cloned locally)
+mpc-server-peliculas/   classmate's MCP server (gitignored, cloned locally)
+docs/                   report material (network layer analysis, conclusions, etc.)
 ```

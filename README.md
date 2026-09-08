@@ -22,8 +22,13 @@ This repository currently implements:
 - Logging of every MCP request/response, to the console and to a JSONL file
   under `logs/` (`chatbot/logging_utils.py`).
 - An `MCPManager` that connects to every server listed in `mcp_servers.json`
-  over stdio, exposes their tools to Claude, and dispatches tool calls
-  (`chatbot/mcp_manager.py`).
+  and dispatches tool calls (`chatbot/mcp_manager.py`), on top of a
+  hand-rolled MCP client (`chatbot/jsonrpc_client.py`) — the host speaks
+  JSON-RPC 2.0 directly over both stdio and Streamable HTTP itself (framing,
+  the `initialize` handshake, request/response correlation), without the
+  `mcp` SDK on the client side. The `mcp` package isn't even installed in
+  this project's own `.venv` — servers on the other end are free to use it
+  themselves (several do).
 - The official **Filesystem MCP server** and **Git MCP server** (Anthropic),
   wired in via `mcp_servers.json`, scoped to the `workspace/` sandbox
   directory so the chatbot can create a repo, write a README, stage it, and
@@ -90,6 +95,34 @@ Then open http://127.0.0.1:8000. This is the same chatbot and the same
 `MCPManager`/MCP servers — only the front end differs, so MCP interactions
 are still logged to `logs/` exactly as in the console version.
 
+## Protocol implementation: raw JSON-RPC, no MCP SDK
+
+`chatbot/jsonrpc_client.py` is the MCP client, implemented by hand instead of
+using the official `mcp` Python SDK (which isn't a dependency of this
+project's `.venv` at all — see `requirements.txt`):
+
+- **Stdio transport** (`StdioJsonRpcSession`): spawns the server subprocess
+  with `asyncio.create_subprocess_exec`, writes newline-delimited JSON-RPC 2.0
+  requests to its stdin, and a background task reads its stdout line by line,
+  parses each line as JSON, and resolves the matching pending request by
+  `id` — the same request/response correlation `ClientSession` normally does
+  internally.
+- **Streamable HTTP transport** (`HttpJsonRpcSession`): POSTs JSON-RPC
+  requests to the server's URL and parses the response body itself, whether
+  the server answers with a plain `application/json` object or a one-shot
+  `text/event-stream` (`data: <json>` lines) — this is how the remote
+  Cloudflare Worker is reached.
+- Both implement the same minimal surface: `initialize()` (sends the
+  `initialize` request, then the `notifications/initialized` notification —
+  the MCP lifecycle handshake), `list_tools()`, `call_tool()`, `close()`.
+  `MCPManager` only talks to that surface, so it doesn't know or care which
+  transport a given server uses.
+
+The servers on the other end of the wire (the official Filesystem/Git
+servers, the classmates' servers, `sat-track-mcp`, the Cloudflare Worker) are
+unaffected and free to use the SDK on their own side — this only removes it
+from the host's side of the protocol.
+
 ## Configuring MCP servers
 
 Servers are declared in `mcp_servers.json`, using the same shape as Claude
@@ -138,7 +171,8 @@ chatbot/            chatbot host source code
   web.py            optional web GUI entry point (FastAPI + WebSocket + /upload)
   web_static/       browser chat UI served by web.py
   engine.py         conversation engine shared by main.py and web.py
-  mcp_manager.py     MCP client connections + tool dispatch
+  mcp_manager.py     server config, tool dispatch, per-server sessions
+  jsonrpc_client.py  hand-rolled MCP client (JSON-RPC 2.0, no mcp SDK)
   logging_utils.py  MCP interaction logging
   config.py         environment/config loading
 mcp_servers.json    declares which MCP servers to connect to

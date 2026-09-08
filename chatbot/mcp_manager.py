@@ -1,25 +1,26 @@
 import json
 import shutil
-from contextlib import AsyncExitStack
 from typing import Any
 
-from mcp import ClientSession, StdioServerParameters
-from mcp.client.stdio import stdio_client
-from mcp.client.streamable_http import streamable_http_client
-
 from . import config
+from .jsonrpc_client import HttpJsonRpcSession, StdioJsonRpcSession
 from .logging_utils import InteractionLogger
+
+McpSession = HttpJsonRpcSession | StdioJsonRpcSession
 
 
 class MCPManager:
     """Maneja las conexiones a los servidores MCP definidos en mcp_servers.json
-    y expone sus tools al LLM en formato compatible con Claude."""
+    y expone sus tools al LLM en formato compatible con Claude.
+
+    Habla JSON-RPC 2.0 directamente (chatbot/jsonrpc_client.py) en vez de usar
+    el SDK de mcp del lado del host."""
 
     def __init__(self, logger: InteractionLogger):
         self.logger = logger
-        self._exit_stack = AsyncExitStack()
-        self.sessions: dict[str, ClientSession] = {}
+        self.sessions: dict[str, McpSession] = {}
         self.tool_to_server: dict[str, str] = {}
+        self._tools_cache: dict[str, list[dict]] = {}
 
     async def connect_all(self) -> None:
         for name, params in self._load_server_configs().items():
@@ -45,8 +46,7 @@ class MCPManager:
         # hablan MCP sobre Streamable HTTP en vez de stdio.
         if "url" in params:
             url = self._expand_placeholders(params["url"])
-            streams = await self._exit_stack.enter_async_context(streamable_http_client(url))
-            read, write = streams[0], streams[1]
+            session: McpSession = HttpJsonRpcSession(url)
         else:
             command = self._expand_placeholders(params["command"])
             # busca el comando en el PATH ("npx", "uvx", etc.) para que funcione en cualquier SO
@@ -54,32 +54,27 @@ class MCPManager:
             args = [self._expand_placeholders(arg) for arg in params.get("args", [])]
             cwd = self._expand_placeholders(params["cwd"]) if "cwd" in params else None
             env = {k: self._expand_placeholders(v) for k, v in params["env"].items()} if "env" in params else None
-            server_params = StdioServerParameters(
-                command=command,
-                args=args,
-                env=env,
-                cwd=cwd,
-            )
-            read, write = await self._exit_stack.enter_async_context(stdio_client(server_params))
+            session = await StdioJsonRpcSession.spawn(command, args, cwd=cwd, env=env)
 
-        session = await self._exit_stack.enter_async_context(ClientSession(read, write))
         await session.initialize()
         self.sessions[name] = session
 
         tools = await session.list_tools()
-        for tool in tools.tools:
-            self.tool_to_server[tool.name] = name
-        print(f"[MCP] connected to '{name}' ({len(tools.tools)} tools)")
+        self._tools_cache[name] = tools
+        for tool in tools:
+            self.tool_to_server[tool["name"]] = name
+        print(f"[MCP] connected to '{name}' ({len(tools)} tools)")
 
     async def list_claude_tools(self) -> list[dict[str, Any]]:
+        # cached at connect time: none of our servers send tools/list_changed,
+        # so re-querying tools/list on every turn would just be extra round-trips
         claude_tools = []
-        for session in self.sessions.values():
-            tools = await session.list_tools()
-            for tool in tools.tools:
+        for tools in self._tools_cache.values():
+            for tool in tools:
                 claude_tools.append({
-                    "name": tool.name,
-                    "description": tool.description or "",
-                    "input_schema": tool.input_schema,
+                    "name": tool["name"],
+                    "description": tool.get("description") or "",
+                    "input_schema": tool.get("inputSchema", {}),
                 })
         return claude_tools
 
@@ -98,8 +93,9 @@ class MCPManager:
             self.logger.log_error(server_name, tool_name, str(exc))
             raise
 
-        text = "\n".join(block.text for block in result.content if hasattr(block, "text"))
-        is_error = bool(getattr(result, "is_error", False))
+        content = result.get("content", [])
+        text = "\n".join(block["text"] for block in content if "text" in block)
+        is_error = bool(result.get("isError", False))
         if is_error:
             self.logger.log_error(server_name, tool_name, text)
         else:
@@ -107,4 +103,5 @@ class MCPManager:
         return text, is_error
 
     async def close(self) -> None:
-        await self._exit_stack.aclose()
+        for session in self.sessions.values():
+            await session.close()

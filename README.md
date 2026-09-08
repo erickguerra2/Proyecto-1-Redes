@@ -30,9 +30,11 @@ This repository currently implements:
   commit — all from natural-language instructions.
 - The satellite MCP server (`sat-track-mcp/`), a purpose-built server for the
   satellite ops use case.
-- Two classmates' MCP servers, wired in the same way: `hotel-mcp-server`
-  (JosFer720) and `mpc-server-peliculas` (Albu231311, a movie-rental store
-  server).
+- Three classmates' MCP servers, wired in the same way (only two are
+  required by the project — the third is extra): `hotel-mcp-server`
+  (JosFer720), `mpc-server-peliculas` (Albu231311, a movie-rental store
+  server), and `mixassist-mcp-server` (diegoanro22, audio mix analysis —
+  loudness/LUFS, spectrum, clipping — over real DSP).
 - A host-side gate on `hotel-mcp-server`'s two-step write flow
   (`crear_reservacion`): a `confirmado: true` call is only accepted if the
   preview call happened on an earlier user turn, so the model can't chain
@@ -46,7 +48,9 @@ This repository currently implements:
   required way to run the project, but the same conversation engine
   (`chatbot/engine.py`) is also served over a WebSocket to a small browser
   chat UI (`chatbot/web_static/index.html`) that shows tool calls and their
-  results inline as they happen, not just the final answer.
+  results inline as they happen, not just the final answer. It also has a
+  file attach button (`POST /upload`) so a local file (e.g. audio for
+  `mixassist-mcp-server`) reaches a tool by path without typing one.
 
 See [`CONTEXT.md`](CONTEXT.md) for the full project checklist and requirements.
 
@@ -131,7 +135,7 @@ local process — this is how the remote Cloudflare Worker is wired in:
 ```
 chatbot/            chatbot host source code
   main.py           console entry point / conversation loop
-  web.py            optional web GUI entry point (FastAPI + WebSocket)
+  web.py            optional web GUI entry point (FastAPI + WebSocket + /upload)
   web_static/       browser chat UI served by web.py
   engine.py         conversation engine shared by main.py and web.py
   mcp_manager.py     MCP client connections + tool dispatch
@@ -140,9 +144,11 @@ chatbot/            chatbot host source code
 mcp_servers.json    declares which MCP servers to connect to
 logs/               MCP interaction logs (gitignored)
 workspace/          sandbox the Filesystem/Git MCP servers operate on (gitignored)
+uploads/            files attached from the web GUI (gitignored)
 sat-track-mcp/          satellite MCP server — separate public repo, nested here
 hotel-mcp-server/       classmate's MCP server (gitignored, cloned locally)
 mpc-server-peliculas/   classmate's MCP server (gitignored, cloned locally)
+mixassist-mcp-server/   classmate's MCP server (gitignored, cloned locally)
 remote-mcp-server/      our own remote MCP server, deployed to Cloudflare Workers
 docs/                   report material (network layer analysis, conclusions, etc.)
 ```

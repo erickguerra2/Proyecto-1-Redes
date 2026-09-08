@@ -5,13 +5,14 @@ the terminal loop for a WebSocket, per browser tab, driving a small chat UI.
 Run with: python -m chatbot.web
 """
 
+import secrets
 import sys
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
 
 import anthropic
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, UploadFile, WebSocket, WebSocketDisconnect
 from fastapi.responses import FileResponse
 
 from . import config
@@ -20,6 +21,12 @@ from .logging_utils import InteractionLogger
 from .mcp_manager import MCPManager
 
 STATIC_DIR = Path(__file__).parent / "web_static"
+UPLOADS_DIR = config.PROJECT_ROOT / "uploads"
+
+# generous but not unbounded — this exists so audio files reach mixassist-mcp
+# without the user typing a Windows path in the chat box, not as a general
+# file host.
+MAX_UPLOAD_BYTES = 300 * 1024 * 1024
 
 state: dict[str, Any] = {}
 
@@ -47,6 +54,29 @@ app = FastAPI(lifespan=lifespan)
 @app.get("/")
 async def index() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.post("/upload")
+async def upload(file: UploadFile) -> dict[str, Any]:
+    """Saves an attached file to disk and hands back its absolute path, so
+    the browser chat can hand tools like mixassist-mcp's audio_file
+    parameter a real path without the user typing one."""
+    UPLOADS_DIR.mkdir(parents=True, exist_ok=True)
+
+    original_name = Path(file.filename or "upload").name  # strip any directory components
+    dest = UPLOADS_DIR / f"{secrets.token_hex(4)}_{original_name}"
+
+    size = 0
+    with dest.open("wb") as out:
+        while chunk := await file.read(1024 * 1024):
+            size += len(chunk)
+            if size > MAX_UPLOAD_BYTES:
+                out.close()
+                dest.unlink(missing_ok=True)
+                raise HTTPException(413, "File too large (max 300 MB).")
+            out.write(chunk)
+
+    return {"path": str(dest.resolve()), "filename": original_name, "size": size}
 
 
 @app.websocket("/ws")

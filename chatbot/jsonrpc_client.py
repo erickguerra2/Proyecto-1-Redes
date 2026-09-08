@@ -43,7 +43,14 @@ _STDIO_LINE_LIMIT = 10 * 1024 * 1024
 
 def _default_environment() -> dict[str, str]:
     import os
-    return {k: v for k in _INHERITED_ENV_VARS if (v := os.environ.get(k)) is not None}
+    env = {k: v for k in _INHERITED_ENV_VARS if (v := os.environ.get(k)) is not None}
+    # Forces UTF-8 for any spawned Python server's stdio, regardless of the
+    # OS's default codepage (a non-ASCII character, e.g. an em dash in a
+    # server's own name, otherwise lands on Windows's cp1252 by default and
+    # breaks JSON parsing on our end). Harmless for non-Python commands.
+    env["PYTHONIOENCODING"] = "utf-8"
+    env["PYTHONUTF8"] = "1"
+    return env
 
 
 class McpProtocolError(RuntimeError):
@@ -94,23 +101,38 @@ class StdioJsonRpcSession:
 
     async def _read_loop(self) -> None:
         assert self._process.stdout is not None
-        while True:
-            line = await self._process.stdout.readline()
-            if not line:
-                break
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                message = json.loads(line)
-            except json.JSONDecodeError:
-                # A well-behaved server never writes non-JSON-RPC to stdout,
-                # but don't take the whole session down if one does.
-                continue
-            msg_id = message.get("id")
-            future = self._pending.pop(msg_id, None) if msg_id is not None else None
-            if future is not None and not future.done():
-                future.set_result(message)
+        try:
+            while True:
+                raw_line = await self._process.stdout.readline()
+                if not raw_line:
+                    break
+                # Some servers inherit the OS's default codepage on Windows
+                # instead of forcing UTF-8 on their own stdout (we also pass
+                # PYTHONIOENCODING=utf-8 to head that off), so decode
+                # leniently rather than letting one bad byte take the reader
+                # loop down.
+                line = raw_line.decode("utf-8", errors="replace").strip()
+                if not line:
+                    continue
+                try:
+                    message = json.loads(line)
+                except json.JSONDecodeError:
+                    # A well-behaved server never writes non-JSON-RPC to stdout,
+                    # but don't take the whole session down if one does.
+                    continue
+                msg_id = message.get("id")
+                future = self._pending.pop(msg_id, None) if msg_id is not None else None
+                if future is not None and not future.done():
+                    future.set_result(message)
+        finally:
+            # However this loop ends, whether the process exited or an
+            # unexpected error above escaped the try, no pending request
+            # should be left to hang for its full timeout: fail them now.
+            error = ConnectionError("stdio reader loop ended before a response arrived")
+            for future in self._pending.values():
+                if not future.done():
+                    future.set_exception(error)
+            self._pending.clear()
 
     async def _send(self, payload: dict) -> None:
         assert self._process.stdin is not None

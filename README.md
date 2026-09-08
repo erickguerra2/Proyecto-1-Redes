@@ -38,7 +38,10 @@ This repository currently implements:
   preview call happened on an earlier user turn, so the model can't chain
   preview + confirm in a single reply and write before the user actually
   approved anything.
-- A remote MCP server will be added in a later phase.
+- A remote MCP server (`remote-mcp-server/`), deployed to Cloudflare Workers
+  and reachable over Streamable HTTP instead of stdio — see its own
+  [README](remote-mcp-server/README.md). `MCPManager` connects to it the same
+  way as the stdio servers, branching on a `url` key in `mcp_servers.json`.
 
 See [`CONTEXT.md`](CONTEXT.md) for the full project checklist and requirements.
 
@@ -94,6 +97,20 @@ its tools available to Claude automatically. The Filesystem server is scoped
 to `workspace/` so the chatbot can only read/write inside that sandbox, not
 across the rest of the project.
 
+A server can also be declared with a `url` instead of `command`/`args`, in
+which case the host connects over Streamable HTTP instead of spawning a
+local process — this is how the remote Cloudflare Worker is wired in:
+
+```json
+{
+  "mcpServers": {
+    "satellite-remote": {
+      "url": "https://satellite-remote-mcp.erickguerra2.workers.dev/mcp"
+    }
+  }
+}
+```
+
 ## Project layout
 
 ```
@@ -108,5 +125,6 @@ workspace/          sandbox the Filesystem/Git MCP servers operate on (gitignore
 sat-track-mcp/          satellite MCP server — separate public repo, nested here
 hotel-mcp-server/       classmate's MCP server (gitignored, cloned locally)
 mpc-server-peliculas/   classmate's MCP server (gitignored, cloned locally)
+remote-mcp-server/      our own remote MCP server, deployed to Cloudflare Workers
 docs/                   report material (network layer analysis, conclusions, etc.)
 ```

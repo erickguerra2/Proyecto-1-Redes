@@ -5,6 +5,7 @@ from typing import Any
 
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+from mcp.client.streamable_http import streamable_http_client
 
 from . import config
 from .logging_utils import InteractionLogger
@@ -39,19 +40,27 @@ class MCPManager:
         return value
 
     async def _connect_server(self, name: str, params: dict) -> None:
-        command = self._expand_placeholders(params["command"])
-        # busca el comando en el PATH ("npx", "uvx", etc.) para que funcione en cualquier SO
-        command = shutil.which(command) or command
-        args = [self._expand_placeholders(arg) for arg in params.get("args", [])]
-        cwd = self._expand_placeholders(params["cwd"]) if "cwd" in params else None
-        env = {k: self._expand_placeholders(v) for k, v in params["env"].items()} if "env" in params else None
-        server_params = StdioServerParameters(
-            command=command,
-            args=args,
-            env=env,
-            cwd=cwd,
-        )
-        read, write = await self._exit_stack.enter_async_context(stdio_client(server_params))
+        # servidores remotos (ej. Cloudflare Workers) se declaran con "url" y
+        # hablan MCP sobre Streamable HTTP en vez de stdio.
+        if "url" in params:
+            url = self._expand_placeholders(params["url"])
+            streams = await self._exit_stack.enter_async_context(streamable_http_client(url))
+            read, write = streams[0], streams[1]
+        else:
+            command = self._expand_placeholders(params["command"])
+            # busca el comando en el PATH ("npx", "uvx", etc.) para que funcione en cualquier SO
+            command = shutil.which(command) or command
+            args = [self._expand_placeholders(arg) for arg in params.get("args", [])]
+            cwd = self._expand_placeholders(params["cwd"]) if "cwd" in params else None
+            env = {k: self._expand_placeholders(v) for k, v in params["env"].items()} if "env" in params else None
+            server_params = StdioServerParameters(
+                command=command,
+                args=args,
+                env=env,
+                cwd=cwd,
+            )
+            read, write = await self._exit_stack.enter_async_context(stdio_client(server_params))
+
         session = await self._exit_stack.enter_async_context(ClientSession(read, write))
         await session.initialize()
         self.sessions[name] = session

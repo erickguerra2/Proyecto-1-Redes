@@ -496,6 +496,11 @@
     bubble.innerHTML = renderMarkdown(bubble.dataset.raw);
   }
 
+  function serverBadge(data) {
+    const icon = data.remote ? "🌐" : "💻";
+    return `${icon} [${data.server || "?"}]`;
+  }
+
   function addToolEvent(label, isError) {
     clearEmptyState();
     currentAssistantBubble = null; // next text block starts a fresh bubble
@@ -616,10 +621,10 @@
       if (data.type === "text") {
         appendAssistantText(data.text);
       } else if (data.type === "tool_call") {
-        addToolEvent(`🛰️ calling ${data.name}(${JSON.stringify(data.arguments)})`, false);
+        addToolEvent(`${serverBadge(data)} calling ${data.name}(${JSON.stringify(data.arguments)})`, false);
       } else if (data.type === "tool_result") {
         const preview = data.result.length > 160 ? data.result.slice(0, 160) + "…" : data.result;
-        addToolEvent(`${data.is_error ? "⚠️" : "📡"} ${data.name} → ${preview}`, data.is_error);
+        addToolEvent(`${data.is_error ? "⚠️" : "✅"} ${serverBadge(data)} ${data.name} → ${preview}`, data.is_error);
       } else if (data.type === "error") {
         addToolEvent(`⚠️ ${data.text}`, true);
       }

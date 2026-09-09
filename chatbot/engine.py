@@ -21,9 +21,18 @@ SYSTEM_PROMPT = (
 # Emits one event dict as the turn progresses, so a front end can render it
 # live instead of waiting for the whole turn to finish. Event shapes:
 #   {"type": "text", "text": str}
-#   {"type": "tool_call", "name": str, "arguments": dict}
-#   {"type": "tool_result", "name": str, "is_error": bool, "result": str}
+#   {"type": "tool_call", "name": str, "arguments": dict, "server": str, "remote": bool}
+#   {"type": "tool_result", "name": str, "is_error": bool, "result": str, "server": str, "remote": bool}
+# "server" is the mcp_servers.json key (e.g. "satellite" vs "satellite-remote")
+# and "remote" says whether that server was reached over a URL instead of a
+# local subprocess -- both let a front end show at a glance which server a
+# call actually went to.
 Emit = Callable[[dict[str, Any]], Awaitable[None]]
+
+
+def _server_info(mcp: MCPManager, tool_name: str) -> dict[str, Any]:
+    server = mcp.tool_to_server.get(tool_name)
+    return {"server": server, "remote": mcp.server_is_remote.get(server, False)}
 
 
 async def handle_turn(
@@ -58,7 +67,8 @@ async def handle_turn(
 
         tool_results = []
         for tool_use in tool_uses:
-            await emit({"type": "tool_call", "name": tool_use.name, "arguments": tool_use.input})
+            server_info = _server_info(mcp, tool_use.name)
+            await emit({"type": "tool_call", "name": tool_use.name, "arguments": tool_use.input, **server_info})
 
             if tool_use.name == "crear_reservacion" and tool_use.input.get("confirmado"):
                 preview_turn = write_confirmation_state["preview_turn"]
@@ -70,7 +80,7 @@ async def handle_turn(
                         "show the details, and wait for the user's next message."
                     )
                     is_error = True
-                    await emit({"type": "tool_result", "name": tool_use.name, "is_error": is_error, "result": result_text})
+                    await emit({"type": "tool_result", "name": tool_use.name, "is_error": is_error, "result": result_text, **server_info})
                     tool_results.append({
                         "type": "tool_result",
                         "tool_use_id": tool_use.id,
@@ -93,7 +103,7 @@ async def handle_turn(
                 if payload.get("requiere_confirmacion"):
                     write_confirmation_state["preview_turn"] = turn_number
 
-            await emit({"type": "tool_result", "name": tool_use.name, "is_error": is_error, "result": result_text})
+            await emit({"type": "tool_result", "name": tool_use.name, "is_error": is_error, "result": result_text, **server_info})
             tool_results.append({
                 "type": "tool_result",
                 "tool_use_id": tool_use.id,

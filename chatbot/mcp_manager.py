@@ -20,6 +20,7 @@ class MCPManager:
         self.logger = logger
         self.sessions: dict[str, McpSession] = {}
         self.tool_to_server: dict[str, str] = {}
+        self.server_is_remote: dict[str, bool] = {}
         self._tools_cache: dict[str, list[dict]] = {}
 
     async def connect_all(self) -> None:
@@ -44,6 +45,7 @@ class MCPManager:
     async def _connect_server(self, name: str, params: dict) -> None:
         # servidores remotos (ej. Cloudflare Workers) se declaran con "url" y
         # hablan MCP sobre Streamable HTTP en vez de stdio.
+        self.server_is_remote[name] = "url" in params
         if "url" in params:
             url = self._expand_placeholders(params["url"])
             session: McpSession = HttpJsonRpcSession(url)

@@ -57,8 +57,6 @@ This repository currently implements:
   file attach button (`POST /upload`) so a local file (e.g. audio for
   `mixassist-mcp-server`) reaches a tool by path without typing one.
 
-See [`CONTEXT.md`](CONTEXT.md) for the full project checklist and requirements.
-
 ## Requirements
 
 - Python 3.10+
